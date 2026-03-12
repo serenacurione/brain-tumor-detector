@@ -24,6 +24,7 @@ function BrainTumorGUI()
         'features',       [], ...
         'prediction',     '', ...
         'model',          [], ...
+        'classNames',     [], ...
         'featureMask',    [], ...
         'mu_train',       [], ...
         'std_train',      [], ...
@@ -221,9 +222,13 @@ function BrainTumorGUI()
         end 
         setStatus('Classifying...');
         x = state.features(state.featureMask);
-        x = (x - state.mu_train)./ state.std_train;
+        x = (x - state.mu_train) ./ state.std_train;
         pred = predict(state.model, x);
-        state.prediction = char(pred);
+        if iscell(pred)
+            state.prediction = pred{1};
+        else
+            state.prediction = char(pred);
+        end
 
         showTumourPanel(axTumr, state.imgGray, state.segMask, state.prediction, ACCENT_RED, ACCENT_GREEN, TEXT_MAIN);
 
@@ -261,8 +266,9 @@ function BrainTumorGUI()
             state.featureMask = fmask;
             state.mu_train = mu;
             state.std_train = sd;
-            cMap = load(fullfile(dPath, 'brain_tumor_model.mat'), 'classMap');
-            state.classMap = cMap.classMap;
+            saved = load(fullfile(dPath, 'brain_tumor_model.mat'), 'classMap', 'classNames');
+            state.classMap   = saved.classMap;
+            state.classNames = saved.classNames;
             setStatus('Model trained and saved. Load an image to classify.');
         catch ME 
             setStatus(['Training error: ' ME.message]);

@@ -51,7 +51,8 @@ function [model, featureMask, mu_train, std_train] = train_model(datasetPath, ke
 
     fprintf('[train_model] Training SVM with kernel: %s\n', kernelType);
     results = svm_classifier(X_tr_norm, y_train, X_te_norm, y_test, kernelType);
-    model = results.model;
+    model      = results.model;       % cell array of binary fitcsvm models
+    classNames = results.classNames;  % class name order used by the OVA models
 
     % Report 
     m = results.metrics;
@@ -66,7 +67,7 @@ function [model, featureMask, mu_train, std_train] = train_model(datasetPath, ke
 
     % Save artefact 
     savePath = fullfile(datasetPath, 'brain_tumor_model.mat');
-    save(savePath, 'model', 'featureMask', 'mu_train', 'std_train', 'classMap');
+    save(savePath, 'model', 'classNames', 'featureMask', 'mu_train', 'std_train', 'classMap');
     fprintf('[train_model] Model saved to: %s\n', savePath);
 end
 
