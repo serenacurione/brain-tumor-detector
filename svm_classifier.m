@@ -59,17 +59,18 @@ function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType)
     end
 
     % ------------------------------------------------------------------
-    % Build SVM learner description struct.
-    % fitcecoc accepts a struct with at least the 'Method' field.
+    % Build SVM learner via templateSVM() — required by fitcecoc.
+    % A plain struct is NOT accepted and causes the "cell" type error.
     % ------------------------------------------------------------------
-    learner.Method         = 'SVM';
-    learner.KernelFunction = kernelFcn;
     if ~isempty(polyOrder)
-        learner.PolynomialOrder = polyOrder;
+        learner = templateSVM('KernelFunction', kernelFcn, ...
+                              'PolynomialOrder', polyOrder);
+    else
+        learner = templateSVM('KernelFunction', kernelFcn);
     end
 
     % ------------------------------------------------------------------
-    % Train multi-class ECOC model (cellstr labels, struct learner)
+    % Train multi-class ECOC model (cellstr labels, templateSVM learner)
     % ------------------------------------------------------------------
     fprintf('[svm_classifier] Fitting ECOC model (%s kernel)...\n', kernelType);
     model = fitcecoc(X_train, y_train_fit, ...
