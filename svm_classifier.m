@@ -1,7 +1,8 @@
-function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType)
+function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType, varargin)
 % SVM_CLASSIFIER  Train and evaluate a multi-class SVM with a given kernel.
 %
 %   results = SVM_CLASSIFIER(X_train, y_train, X_test, y_test, kernelType)
+%   results = SVM_CLASSIFIER(..., 'BoxConstraint', C, 'KernelScale', gamma)
 %
 %   Inputs:
 %       X_train    - N_train x F normalised feature matrix
@@ -10,16 +11,33 @@ function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType)
 %       y_test     - N_test  x 1 categorical (or cellstr/numeric) labels
 %       kernelType - 'rbf' (default) | 'linear' | 'polynomial' | 'quadratic'
 %
+%   Optional Name-Value Pairs:
+%       'BoxConstraint' - SVM regularisation parameter C (default: 1)
+%       'KernelScale'   - RBF/poly kernel bandwidth gamma (default: 'auto')
+%
 %   Output:
 %       results.model        - Trained fitcecoc model
 %       results.classNames   - Class name strings
 %       results.predictions  - N_test x 1 categorical predictions
 %       results.metrics      - struct from evaluate_metrics
 %       results.kernelType   - kernel string used
+%       results.C            - BoxConstraint used
+%       results.gamma        - KernelScale used (NaN for linear)
 
     if nargin < 5 || isempty(kernelType)
         kernelType = 'rbf';
     end
+
+    % ------------------------------------------------------------------
+    % Parse optional hyperparameter overrides (from grid search)
+    % ------------------------------------------------------------------
+    p = inputParser();
+    p.addParameter('BoxConstraint', 1,    @(x) isnumeric(x) && x > 0);
+    p.addParameter('KernelScale',   NaN,  @(x) isnumeric(x));
+    p.parse(varargin{:});
+
+    C_val     = p.Results.BoxConstraint;
+    gamma_val = p.Results.KernelScale;
 
     % ------------------------------------------------------------------
     % Map user-friendly kernel name -> MATLAB KernelFunction string
@@ -59,20 +77,44 @@ function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType)
     end
 
     % ------------------------------------------------------------------
-    % Build SVM learner via templateSVM() — required by fitcecoc.
-    % A plain struct is NOT accepted and causes the "cell" type error.
+    % Build SVM learner via templateSVM() with hyperparameters.
+    % KernelScale is only meaningful for rbf/polynomial kernels.
     % ------------------------------------------------------------------
+    useGamma = ~isnan(gamma_val) && ~strcmp(kernelFcn, 'linear');
+
     if ~isempty(polyOrder)
-        learner = templateSVM('KernelFunction', kernelFcn, ...
-                              'PolynomialOrder', polyOrder);
+        if useGamma
+            learner = templateSVM('KernelFunction',  kernelFcn, ...
+                                  'PolynomialOrder', polyOrder, ...
+                                  'BoxConstraint',   C_val, ...
+                                  'KernelScale',     gamma_val);
+        else
+            learner = templateSVM('KernelFunction',  kernelFcn, ...
+                                  'PolynomialOrder', polyOrder, ...
+                                  'BoxConstraint',   C_val);
+        end
     else
-        learner = templateSVM('KernelFunction', kernelFcn);
+        if useGamma
+            learner = templateSVM('KernelFunction', kernelFcn, ...
+                                  'BoxConstraint',  C_val, ...
+                                  'KernelScale',    gamma_val);
+        else
+            learner = templateSVM('KernelFunction', kernelFcn, ...
+                                  'BoxConstraint',  C_val);
+        end
     end
 
     % ------------------------------------------------------------------
     % Train multi-class ECOC model (cellstr labels, templateSVM learner)
     % ------------------------------------------------------------------
-    fprintf('[svm_classifier] Fitting ECOC model (%s kernel)...\n', kernelType);
+    if useGamma
+        fprintf('[svm_classifier] Fitting ECOC model (%s kernel | C=%.4g | gamma=%.4g)...\n', ...
+            kernelType, C_val, gamma_val);
+    else
+        fprintf('[svm_classifier] Fitting ECOC model (%s kernel | C=%.4g)...\n', ...
+            kernelType, C_val);
+    end
+
     model = fitcecoc(X_train, y_train_fit, ...
         'Learners', learner, ...
         'Coding',   'onevsall');
@@ -99,4 +141,6 @@ function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType)
     results.predictions = predictions;
     results.metrics     = metrics;
     results.kernelType  = kernelType;
+    results.C           = C_val;
+    results.gamma       = gamma_val;
 end

@@ -14,7 +14,6 @@ Il progetto è stato interamente sviluppato in **MATLAB**. Per eseguire corretta
 Assicurarsi di aver scaricato e installato i seguenti Add-on dall'**Add-On Explorer** di MATLAB (visibile nela barra "Home"):
 1. **Image Processing Toolbox**: Obbligatorio per tutte le operazioni di filtraggio, morfologia matematica, ridimensionamento e segmentazione dell'immagine.
 2. **Statistics and Machine Learning Toolbox**: Obbligatorio per l'algoritmo EM (Gaussian Mixture Models), l'addestramento SVM, la Cross-Validation e la predizione.
-3. **Global Optimization Toolbox**: (*Opzionale ma raccomandato*) Necessario *solo* se si intende eseguire la Genetic Algorithm (GA) per la selezione delle feature statistiche ottimali. Se non si possiede questo toolbox, assicurarsi di **non** spuntare la casella "Use Genetic Algorithm" nella GUI, in modo da utilizzare di default tutte le feature.
 
 Nessuna ulteriore installazione via shell è richiesta (nessun framework Python o pacchetto addizionale).
 
@@ -24,18 +23,18 @@ Ogni funzione del progetto è implementata in un file `.m` dedicato, seguendo pa
 
 ### File Principali di Esecuzione
 - **`main.m`**: È il punto di ingresso dell'applicazione (Entry point). Permette di lanciare la GUI visuale (se eseguito senza parametri) oppure di lanciare il training veloce da command line / CLI passando l'argomento `'train'`.
-- **`BrainTumorGUI.m`**: Contiene l'intero codice dell'interfaccia grafica (Graphical User Interface) "dark-theme" costruita programmaticamente tramite le callback di `uifigure`. Gestisce in un design ordinato i bottoni, la visualizzazione delle aree della MRI nei vari stadi, e l'aggiornamento simultaneo tra lo status predittivo e quello d'interfaccia.
 
 ### Moduli della Pipeline di Elaborazione
 - **`preprocessing.m` (Fase 1)**: Modulo per il trattamento primario dell'immagine MRI (convertita in scala di grigi). Implementa l'applicazione sequenziale del filtro Passa-Alto (Laplaciano) per l'edge-sharpening e delineamento differenziale, filtri Passa-Basso (Gaussiano 5x5) per ammorbidire imperfezioni non del tumore e filtro Mediano per ridurre pesantemente il rumore salt-and-pepper preservando i bordi essenziali.
-- **`segmentation.m` (Fase 2)**: Isola l'area cerebrale di pertinenza. Implementa diversi algoritmi di Image Segmentation, incrociandone i risultati: Expectation-Maximization (EM basato su GMM dei tessuti), sogliatura dinamica (Otsu Thresholding), Level-Set (Chan-Vese Method) e infine tecnica ad immersione Watershed per distinguere tra materia con densità similare.
-- **`feature_extraction.m` (Fase 3)**: Modulo matematico che converte le aree maschera della segmentazione in matrici e dati statistici. In totale computa ed estrae **11 parametri (features)**: feature di primo ordine (Mean, Std, Entropy, Smoothness, Uniformity), feature di momento superiore (Normalizzate alla 3a e 4a dimensione) e feature testurali basate sulle Gray Level Co-occurrence Matrix / GLCM (Energy, Contrast, Inverse Difference Moment IDM, Correlation).
+- **`segmentation.m` (Fase 2)**: Isola l'area cerebrale di pertinenza. Implementa diversi algoritmi di Image Segmentation, incrociandone i risultati: Expectation-Maximization (EM basato su GMM dei tessuti) e sogliatura dinamica (Otsu Thresholding).
+- **`feature_extraction.m` (Fase 3)**: Modulo matematico che converte le aree maschera della segmentazione in matrici e dati statistici. In totale computa ed estrae **11 parametri (features)**: feature di primo ordine (Mean, Std, Entropy, Smoothness, Uniformity), feature di momento superiore (Normalizzate alla 3a e 4a dimensione) e feature testurali (Energy, Contrast, Inverse Difference Moment IDM, Correlation).
 - **`genetic_feature_selection.m` (Opzionale)**: Routine Euristica ispirata ai meccanismi biologici (Algoritmo Genetico). Ha lo scopo di minimizzare la funzione di predizione scartando feature irrilevanti provando casualmente maschere di selezione (cromosomi). Usa come fitness la funzione di loss derivata da una Cross Validation "5-fold", massimizzando logicamente l'Accuratezza SVM di validazione.
-- **`svm_classifier.m` (Fase 4)**: Funzione trainante di supporto vettoriale che materializza la predizione. Implementa il multi-classe basandosi sull'algoritmo Error-Correcting Output Codes (ECOC one-vs-all). Permette flessibilmente l'interscambio immediato fra 4 astrazioni concettuali differenti: kernel Radial Basis Function (RBF), Lineare, Polinomiale e Quadratico.
+- **`svm_classifier.m` (Fase 4)**: Funzione trainante di supporto vettoriale che materializza la predizione. Implementa il multi-classe basandosi sull'algoritmo Error-Correcting Output Codes (ECOC one-vs-all). Permette flessibilmente l'interscambio immediato fra 4 astrazioni concettuali differenti: kernel Radial Basis Function (RBF), Lineare, Polinomiale e Quadratico. Accetta opzionalmente i parametri `BoxConstraint` (C) e `KernelScale` (gamma) per l'uso diretto con i valori ottimali trovati dalla grid search.
+- **`svm_grid_search.m` (Ottimizzazione)**: Modulo dedicato alla ricerca degli iper-parametri SVM ottimali tramite **Grid Search con k-fold Cross-Validation stratificata** combinata al **riconoscimento del Kernel migliore**. Esplora la griglia combinatoria di `BoxConstraint` (C) e `KernelScale` (γ) per tutti i kernel in input (es. tutti e 4 passati come `'auto'`), su tutti i fold del training set. Al termine restituisce la combinazione **(Kernel, C, γ)** massima assoluta, evitando data leakage dal test set. Produce una tabella ASCII completa dei risultati intermedi per ogni kernel valutato.
 - **`evaluate_metrics.m`**: Motore inferenziale statistico di fine pipeline. Date in pasto target originali e classi predette restituisce la Matrice di Confusione con Accuratezza, Sensibilità, Specificità, Precisione ed F1-Score (medie multi-classe) da comparare con l'originale ricerca target.
 
 ### Utilities di Supporto e Benchmark
-- **`train_model.m`**: Script che automatizza e coordina le procedure precedenti sui set integrali di un database. Cicla ricorsivamente ed estrae le features dal folder di `Training` normalizzandole statisticamente per limitare l'overfitting. Salva infine i pesi del kernel e la media per la standardizzazione nel file consolidato `brain_tumor_model.mat`.
+- **`train_model.m`**: Script che automatizza e coordina le procedure precedenti sui set integrali di un database. Cicla ricorsivamente ed estrae le features dal folder di `Training` normalizzandole statisticamente per limitare l'overfitting. Supporta il flag opzionale `'GridSearch'` per eseguire automaticamente la Grid Search prima del training finale. Salva infine i pesi del kernel e la media per la standardizzazione nel file consolidato `brain_tumor_model.mat`, e i risultati della grid search in `grid_search_results.mat`.
 - **`compare_kernels.m`**: Potente script di misurazione comparativa. Estrae a strascico l'intero dataset e lo immette nelle 4 configurazioni SVM in un unico respiro. Crea un elegante grafico a barre per mettere in luce l'impatto algoritmico del Kernel sulla metrica d'interesse. (Essendo lungo, salva a terra la cache di dati nativi estratti in `feature_cache.mat` al primo giro per potenziamento drastico della computazione alle run future).
 
 ---
@@ -45,38 +44,53 @@ Ogni funzione del progetto è implementata in un file `.m` dedicato, seguendo pa
 Il sistema è un programma ad _apprendimento supervisionato_. Non può compiere deduzioni e classificare correttamente (Classify) su immagini libere finché non è stato "addestrato" (Training) con i dati del dataset corretto.
 
 ### Fase A: Eseguire il Training (Addestramento del Modello)
-Puoi procedere ad allenare la SVM dell'algoritmo in due modalità principali:
-
-**1. Training Interattivo (Tramite GUI)**
-1. Clicca sul file `main.m` ed eseguilo, oppure digita `main()` nel terminale di MATLAB e premi invio. Verrà mostrata a schermo l'interfaccia utente in stile "Dark Theme".
-2. Nel pannello sinistro, alla voce **Dataset path:**, assicurati di posizionare il path corretto (es. `C:\Users\NOME\Desktop\progetto_IP\dataset`). Se la barra di testo è lasciata vuota, cliccare su "Train Model" aprirà una comoda finestra del sistema operativo per selezionare interattivamente la radice del dataset e la memorizzerà.
-3. Seleziona dal selettore a tendina il Kernel da usare. Di default, **RBF** (Radial Basis Function) gestisce egregiamente le non-linearità dello shape neoplastico tumorale.
-4. *Opzionale:* Clicca "Use Genetic Algorithm" se vuoi limitare le feature in entrata al classificatore, perdendo inizialmente in efficienza computazionale per guadagnare in prestazione SVM.
-5. Clicca vigorosamente sul bottone **"Train Model"**. Essendo un'operazione avida di risorse, potresti dover aspettare alcuni minuti dipendentemente dalle specifiche del tuo processore. Il label in basso ("Status") ti terrà informato.
-6. A processo finito, apparirà nella shell i calcoli finali e sulla memoria fisica si plasmerà il file dei pesi vettoriali "brain_tumor_model.mat" nella cartella *dataset/*.
-
-**2. Training Veloce Automation (Tramite CLI)**
-Lavorare in CLI permette ai thread di non doversi scindere tra interfacce UI e calcolo matematico. Nel prompt di MATLAB esegui semplicemente:
+L'addestramento della SVM avviene interamente da **Command Line (CLI)** di MATLAB. Nel prompt di MATLAB esegui:
 ```matlab
-% Forma Base con default
+% Forma Base con default (kernel RBF)
 main('train')
 
-% Specificando Kernel RBF (migliore su questo set) disabilitando Genetic Algorithm (0)
-main('train', 'rbf', 0)
+% Specificando Kernel RBF (migliore su questo set)
+main('train', 'rbf')
 ```
-Questo genererà un log in tempo reale delle cartelle ispezionate (iterazioni batch per batch) che certificherà una volta giunto al termine, la completezza della procedura.
+Questo genererà un log in tempo reale delle cartelle ispezionate (iterazioni batch per batch) che certificherà una volta giunto al termine, la completezza della procedura. Il file dei pesi vettoriali `brain_tumor_model.mat` verrà salvato nella cartella *dataset/*.
 
-### Fase B: Testing, Singola Valutazione e Benchmark Metriche
-Ora che il modello è stato addestrato al discriminante cellulare, il software è in uso:
+### Fase A-bis: Training con Grid Search + Cross-Validation (Migliore)
+Per trovare automaticamente sia il **Kernel migliore** che i valori ottimali degli iper-parametri SVM (`BoxConstraint` C e `KernelScale` γ), esegui il training con Grid Search. Se non specifichi nulla, il programma testerà in automatico **tutti e 4 i kernel disponibili** (RBF, Lineare, Polinomiale, Quadratico):
+```matlab
+% Grid Search automatica globale (testa tutti i kernel su una griglia di default)
+main('gridsearch')
 
-- **Eseguire un Test Real-Time (Una Immagine Nuova)**:
-  1. Aprire la GUI e cliccare su **"Load MRI Image"**. Scegli dal tuo sistema un'immagine (puoi usare un file dentro `dataset/Testing/...` per test di precisione).
-  2. Per fare un batch processing unico, clicca in fondo al pannello blu **"Run Full Pipeline"**. L'immagine verrà simultaneamente Processata tramite matrice Gaussiana/Laplaciana, il tumore Segmentato visualizzando una Bounding box di localizzazione in layer verde, verranno carpite le feature testurali e per ultimo un label grande sentenzierà la predizione ("Meningioma", "No Tumor", ecc.).
-  (Puoi altresì procedere in slow-motion manuale cliccando i pulsanti verdi uno ad uno per ispezionare singolarmente i risultati grafici).
+% Grid Search specificando un solo kernel (per risparmiare tempo)
+main('gridsearch', 'rbf')
 
-- **Ottenere le Statistiche del Paper Target (Testing dell'intero set)**:
-  1. Per testare l'algoritmo *su tutti i record* tenuti in disparte e rilegati per Validazione (Testing Folder), non usa la GUI. Nel Terminal di MATLAB usa il comando dedicato e preposto all'analisi qualitativa di massa:
-  ```matlab
-  compare_kernels('/path/to/dataset')
-  ```
-  2. Nel MATLAB Command Window appariranno le Matrici di Confusione e le seguenti metriche cruciali per validare contro i target prescritti del paper: *Accuracy* (Obiettivo: $\ge 98.30\%$), *Sensitivity / Rischio veri positivi* (Obiettivo: $\ge 98\%$), e *Specificity / Sicurezza falsi allarmi* (Obiettivo: $100\%$). Verrà anche lanciata una bellissima e utile UI figure aggiuntiva (Bar Chart) che riassumerà con codice coloro-centrico le prestazioni divise per il variare dell'iper-parametro di Supporto Vettoriale (le 4 varianti di kernel).
+% Personalizzando la griglia (testa tutti i kernel con le tue opzioni)
+main('gridsearch', 'auto', 'KFolds', 10, ...
+     'CValues',      [0.01 0.1 1 10 100], ...
+     'GammaValues',  [0.001 0.01 0.1 1])
+```
+
+Il sistema:
+1. Per ogni kernel selezionato, costruisce tutte le combinazioni (C, γ) nella griglia
+2. Valuta ciascuna combinazione con k-fold Cross-Validation **sul solo training set** (nessun data leakage dal test set)
+3. Stampa le tabelle complete delle accuratezze CV con la configurazione ottimale globale evidenziata
+4. Addestra il modello ECOC multi-classe finale con la **combinazione vincente assoluta (Kernel + C + γ)**
+5. Salva `grid_search_results.mat` (risultati di ogni tabella CV) e `brain_tumor_model.mat` (modello finale per la GUI o test)
+
+È anche possibile invocare la grid search programmaticamente per massima flessibilità. Puoi testare stringhe come `'auto'`, o un singolo kernel in formato stringa, oppure una matrice di celle specifica `{'rbf', 'linear'}`:
+```matlab
+datasetPath = '/path/to/dataset';
+[X_train, y_train, ~] = ...; % dopo aver estratto le features
+
+% Testa ad esempio RBF e Linear passandoli come cell array
+[bestParams, gsResults] = svm_grid_search(X_train, y_train, {'rbf', 'linear'}, ...
+    'KFolds', 5, ...
+    'CValues',     logspace(-2, 3, 6), ...
+    'GammaValues', logspace(-3, 2, 6));
+```
+
+### Fase B: Ottenere le Statistiche del Paper Target (Testing dell'intero set)
+Per testare l'algoritmo *su tutti i record* tenuti in disparte e rilegati per Validazione (Testing Folder), usare il comando dedicato all'analisi qualitativa di massa nel Terminal di MATLAB:
+```matlab
+compare_kernels('/path/to/dataset')
+```
+Nel MATLAB Command Window appariranno le Matrici di Confusione e le seguenti metriche cruciali per validare contro i target prescritti del paper: *Accuracy* (Obiettivo: $\ge 98.30\%$), *Sensitivity / Rischio veri positivi* (Obiettivo: $\ge 98\%$), e *Specificity / Sicurezza falsi allarmi* (Obiettivo: $100\%$). Verrà anche generata una UI figure aggiuntiva (Bar Chart) che riassumerà con codice coloro-centrico le prestazioni divise per il variare dell'iper-parametro di Supporto Vettoriale (le 4 varianti di kernel).
