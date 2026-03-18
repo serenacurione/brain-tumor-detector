@@ -17,7 +17,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
 %       'CValues'      - Grid of BoxConstraint values  (default: logspace(-2,3,6))
 %       'GammaValues'  - Grid of KernelScale values    (default: logspace(-3,2,6))
 %                        (ignored for the linear kernel)
-%       'Verbose'      - Print progress (true/false)   (default: true)
 %
 %   Outputs:
 %       bestParams - Struct with fields identifying the global best parameter set:
@@ -42,13 +41,11 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
     p.addParameter('KFolds',      5,                       @(x) isnumeric(x) && x >= 2);
     p.addParameter('CValues',     logspace(-2, 3, 6),      @isnumeric);
     p.addParameter('GammaValues', logspace(-3, 2, 6),      @isnumeric);
-    p.addParameter('Verbose',     true,                    @islogical);
     p.parse(X_train, y_train, kernels, varargin{:});
 
     kFolds     = p.Results.KFolds;
     CValues    = p.Results.CValues;
     GammaValues= p.Results.GammaValues;
-    verbose    = p.Results.Verbose;
 
     % Resolve kernels array
     if ischar(kernels) || isstring(kernels)
@@ -82,11 +79,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
     gsResults = struct('kernelType', {}, 'C_grid', {}, 'gamma_grid', {}, ...
                        'cvAccuracy', {}, 'bestIdx', {});
 
-    if verbose
-        fprintf('\n[svm_grid_search] Starting Grid Search.\n');
-        fprintf('Folds: %d | Kernels to test: %d\n', kFolds, numel(kernels));
-    end
-
     % ------------------------------------------------------------------
     % Outer loop: Kernels
     % ------------------------------------------------------------------
@@ -118,15 +110,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
         nC     = numel(C_grid);
         nGamma = numel(gamma_grid);
         cvAccuracy = zeros(nC, nGamma);
-        totalCombos = nC * nGamma;
-        comboIdx    = 0;
-
-        if verbose
-            fprintf('\n--- Evaluating Kernel: %s ---\n', upper(kernelType));
-            fprintf('Grid: %d x %d = %d combos\n', nC, nGamma, totalCombos);
-            fprintf('%-12s %-12s %-12s\n', 'C', 'Gamma', 'CV Acc (%)');
-            fprintf('%s\n', repmat('-', 1, 40));
-        end
 
         % ------------------------------------------------------------------
         % Grid search inner loops
@@ -135,7 +118,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
             C_val = C_grid(ci);
 
             for gi = 1:nGamma
-                comboIdx = comboIdx + 1;
                 gamma_val = gamma_grid(gi);
 
                 foldAcc = zeros(kFolds, 1);
@@ -181,15 +163,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
                 end
 
                 cvAccuracy(ci, gi) = mean(foldAcc);
-
-                if verbose
-                    gammaStr = 'N/A';
-                    if ~isnan(gamma_val)
-                        gammaStr = sprintf('%.4g', gamma_val);
-                    end
-                    fprintf('%-12.4g %-12s %-12.2f  [%d/%d]\n', ...
-                        C_val, gammaStr, cvAccuracy(ci,gi) * 100, comboIdx, totalCombos);
-                end
             end
         end
 
@@ -211,17 +184,5 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
             bestParams.gamma      = gamma_grid(bestGi);
             bestParams.accuracy   = maxAccKernel;
         end
-    end
-
-    if verbose && ~isempty(bestParams)
-        fprintf('\n========================================\n');
-        fprintf('[svm_grid_search] GLOBAL BEST configuration found:\n');
-        fprintf('  Kernel : %s\n', upper(bestParams.kernelType));
-        fprintf('  C      : %.4g\n', bestParams.C);
-        if ~isnan(bestParams.gamma)
-            fprintf('  Gamma  : %.4g\n', bestParams.gamma);
-        end
-        fprintf('  CV Acc : %.2f%%\n', bestParams.accuracy * 100);
-        fprintf('========================================\n\n');
     end
 end

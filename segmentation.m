@@ -1,37 +1,31 @@
-function [seg_em, seg_threshold] = segmentation(img_filtered)
+function [seg_em, seg_threshold] = segmentation(img)
 % SEGMENTATION Segment a pre-processed MRI image using multiple algorithms.
 %
-%   [seg_em, seg_threshold] = SEGMENTATION(img_filtered)
+%   [seg_em, seg_threshold] = SEGMENTATION(img)
 %
 %   Input:
-%       img_filtered  - Pre-processed grayscale double image in [0, 1]
+%       img  - Pre-processed grayscale double image in [0, 1]
 %   Output:
 %       seg_em        - EM-based segmentation (binary mask of tumour region)
 %       seg_threshold - Gray-level threshold segmentation (binary mask)
 
-    if size(img_filtered, 3) == 3
-        img_filtered = rgb2gray(img_filtered);
-    end
-    img_d = im2double(img_filtered);
 
-    % --- 1. EM segmentation (Gaussian Mixture Model, K=3 tissues) ---
-    seg_em = emSegmentation(img_d, 3);
+    % 1. EM segmentation (Gaussian Mixture Model, K=3 tissues)
+    seg_em = emSegmentation(img, 3);
 
-    % --- 2. Threshold segmentation (Otsu on EM foreground) ---
-    level = graythresh(img_d);
-    seg_threshold = imbinarize(img_d, level);
+    % 2. Threshold segmentation (Otsu on EM foreground)
+    level = graythresh(img);
+    seg_threshold = imbinarize(img, level);
     seg_threshold = imfill(seg_threshold, 'holes');
     seg_threshold = bwareaopen(seg_threshold, 50);
 end
 
-% =========================================================================
-% EM segmentation via Gaussian Mixture Model (custom, no toolbox needed)
-% =========================================================================
+% EM segmentation via Gaussian Mixture Model (custom, no toolbox used)
 function mask = emSegmentation(img, K)
     pixels = double(img(:));
     N = numel(pixels);
 
-    % --- Initialisation (k-means style: evenly spaced means) ---
+    % Initialisation (k-means style: evenly spaced means)
     mu  = linspace(min(pixels), max(pixels), K);
     sig = ones(1, K) * var(pixels) / K + 1e-6;   % variance per component
     pi_ = ones(1, K) / K;                          % mixing weights
@@ -43,21 +37,21 @@ function mask = emSegmentation(img, K)
     gamma = zeros(N, K);   % responsibilities
 
     for iter = 1:maxIter
-        % --- E-step: compute responsibilities ---
+        % E-step: compute responsibilities
         for k = 1:K
             gamma(:, k) = pi_(k) * gaussPdf(pixels, mu(k), sig(k));
         end
         sumGamma = sum(gamma, 2) + 1e-300;   % avoid /0
         gamma    = gamma ./ sumGamma;
 
-        % --- Log-likelihood (for convergence check) ---
+        % Log-likelihood (for convergence check)
         logLik = sum(log(sumGamma));
         if abs(logLik - logLikPrev) < tol
             break;
         end
         logLikPrev = logLik;
 
-        % --- M-step: update parameters ---
+        % M-step: update parameters
         Nk = sum(gamma, 1) + 1e-10;          % effective count per cluster
         for k = 1:K
             mu(k)  = (gamma(:,k)' * pixels) / Nk(k);
@@ -75,7 +69,6 @@ function mask = emSegmentation(img, K)
     mask = bwareaopen(mask, 30);
 end
 
-% Gaussian PDF helper
 function p = gaussPdf(x, mu, sigma2)
     p = exp(-0.5 * (x - mu).^2 / sigma2) / sqrt(2 * pi * sigma2);
 end

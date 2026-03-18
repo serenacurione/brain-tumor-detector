@@ -1,19 +1,14 @@
-function [model, featureMask, mu_train, std_train] = train_model(datasetPath, kernelType, varargin)
+function [model, featureMask, mu_train, std_train] = train_model(datasetPath, varargin)
 % TRAIN_MODEL Build and save a complete brain-tumour classification pipeline.
 %
 %   [model, featureMask, mu_train, std_train] = 
-%       TRAIN_MODEL(datasetPath, kernelType)
-%   [model, featureMask, mu_train, std_train] = 
-%       TRAIN_MODEL(datasetPath, kernelType, 'GridSearch', true, ...)
+%       TRAIN_MODEL(datasetPath)
 %
 %   Inputs:
 %       datasetPath - Absolute path to the dataset root that contains
 %                     Training/ and Testing/ sub-folders.
-%       kernelType  - SVM kernel: 'rbf' (default) | 'linear' |
-%                    'polynomial' | 'quadratic'
 %
-%   Optional Name-Value Pairs (passed through to svm_grid_search):
-%       'GridSearch'   - Run grid search before final training (default: false)
+%   Optional Name-Value Pairs:
 %       'KFolds'       - Number of CV folds for grid search   (default: 5)
 %       'CValues'      - BoxConstraint grid                   (default: logspace(-2,3,6))
 %       'GammaValues'  - KernelScale grid for rbf/poly        (default: logspace(-3,2,6))
@@ -26,21 +21,15 @@ function [model, featureMask, mu_train, std_train] = train_model(datasetPath, ke
 %
 %   The function also saves 'brain_tumor_model.mat' in datasetPath.
 
-    if nargin < 2 || isempty(kernelType)
-        kernelType = 'rbf';
-    end
-
     % ------------------------------------------------------------------
     % Parse optional grid-search arguments
     % ------------------------------------------------------------------
     p = inputParser();
-    p.addParameter('GridSearch',   false,              @islogical);
     p.addParameter('KFolds',       5,                  @(x) isnumeric(x) && x >= 2);
     p.addParameter('CValues',      logspace(-2, 3, 6), @isnumeric);
     p.addParameter('GammaValues',  logspace(-3, 2, 6), @isnumeric);
     p.parse(varargin{:});
 
-    runGridSearch = p.Results.GridSearch;
     kFolds        = p.Results.KFolds;
     C_grid        = p.Results.CValues;
     gamma_grid    = p.Results.GammaValues;
@@ -68,52 +57,35 @@ function [model, featureMask, mu_train, std_train] = train_model(datasetPath, ke
     X_te_norm = (X_te - mu_train) ./ std_train;
 
     % ------------------------------------------------------------------
-    % Optional Grid Search + Cross-Validation
+    % Grid Search + Cross-Validation
     % ------------------------------------------------------------------
-    bestC     = 1;      % default hyperparameters
-    bestGamma = NaN;
+    fprintf('\n[train_model] Phase 1/2: Starting Grid Search & %d-Fold CV...\n', kFolds);
 
-    if runGridSearch
-        fprintf('\n[train_model] Running Grid Search + %d-Fold Cross-Validation...\n', kFolds);
+    [bestParams, gsResults] = svm_grid_search(X_tr_norm, y_train, 'auto', ...
+        'KFolds',       kFolds, ...
+        'CValues',      C_grid, ...
+        'GammaValues',  gamma_grid);
 
-        [bestParams, gsResults] = svm_grid_search(X_tr_norm, y_train, kernelType, ...
-            'KFolds',       kFolds, ...
-            'CValues',      C_grid, ...
-            'GammaValues',  gamma_grid, ...
-            'Verbose',      true);
+    kernelType = bestParams.kernelType;
+    bestC      = bestParams.C;
+    bestGamma  = bestParams.gamma;
 
-        kernelType = bestParams.kernelType;
-        bestC      = bestParams.C;
-        bestGamma  = bestParams.gamma;
-
-        fprintf('\n[train_model] Grid Search complete.\n');
-        fprintf('  Best Kernel= %s\n', upper(kernelType));
-        fprintf('  Best C     = %.4g\n', bestC);
-        if ~isnan(bestGamma)
-            fprintf('  Best Gamma = %.4g\n', bestGamma);
-        end
-        fprintf('  Best CV Accuracy = %.2f%%\n\n', bestParams.accuracy * 100);
-
-        % Save grid search results alongside model
-        gsPath = fullfile(datasetPath, 'grid_search_results.mat');
-        save(gsPath, 'gsResults', 'bestParams');
-        fprintf('[train_model] Grid search results saved to: %s\n', gsPath);
-
-        % Print the full CV accuracy tables for all evaluated kernels
-        for kIdx = 1:numel(gsResults)
-            fprintf('\n--- Cross-Validation Accuracy Grid (%s kernel) ---\n', gsResults(kIdx).kernelType);
-            printGridTable(gsResults(kIdx));
-        end
-    elseif ischar(kernelType) && strcmpi(kernelType, 'auto')
-        % Fallback if 'auto' is used but grid search is false
-        fprintf('[train_model] WARNING: ''auto'' kernel used without GridSearch. Defaulting to ''rbf''.\n');
-        kernelType = 'rbf';
+    fprintf('[train_model] Grid Search complete.\n');
+    fprintf('  Best Kernel= %s\n', upper(kernelType));
+    fprintf('  Best C     = %.4g\n', bestC);
+    if ~isnan(bestGamma)
+        fprintf('  Best Gamma = %.4g\n', bestGamma);
     end
+    fprintf('  Best CV Accuracy = %.2f%%\n', bestParams.accuracy * 100);
+
+    % Save grid search results alongside model
+    gsPath = fullfile(datasetPath, 'grid_search_results.mat');
+    save(gsPath, 'gsResults', 'bestParams');
 
     % ------------------------------------------------------------------
-    % Final training with (optimal) hyperparameters
+    % Final training with optimal hyperparameters
     % ------------------------------------------------------------------
-    fprintf('\n[train_model] Training final SVM with kernel: %s\n', kernelType);
+    fprintf('\n[train_model] Phase 2/2: Training final SVM...\n');
 
     if ~isnan(bestGamma)
         results = svm_classifier(X_tr_norm, y_train, X_te_norm, y_test, kernelType, ...
@@ -148,51 +120,7 @@ function [model, featureMask, mu_train, std_train] = train_model(datasetPath, ke
     fprintf('[train_model] Model saved to: %s\n', savePath);
 end
 
-% =========================================================================
-%  Pretty-print the CV accuracy grid
-% =========================================================================
-function printGridTable(gsResults)
-    C_grid     = gsResults.C_grid;
-    gamma_grid = gsResults.gamma_grid;
-    cvAcc      = gsResults.cvAccuracy * 100;   % convert to %
-    bestIdx    = gsResults.bestIdx;
 
-    hasGamma = ~(numel(gamma_grid) == 1 && isnan(gamma_grid(1)));
-
-    if hasGamma
-        % Header
-        header = sprintf('%-10s', 'C \\ Gamma');
-        for gi = 1:numel(gamma_grid)
-            header = [header, sprintf('%-10.3g', gamma_grid(gi))]; %#ok<AGROW>
-        end
-        fprintf('%s\n', header);
-        fprintf('%s\n', repmat('-', 1, length(header)));
-
-        for ci = 1:numel(C_grid)
-            row = sprintf('%-10.3g', C_grid(ci));
-            for gi = 1:numel(gamma_grid)
-                val = cvAcc(ci, gi);
-                if ci == bestIdx(1) && gi == bestIdx(2)
-                    row = [row, sprintf('[%6.2f%%] ', val)]; %#ok<AGROW>
-                else
-                    row = [row, sprintf(' %6.2f%%  ', val)]; %#ok<AGROW>
-                end
-            end
-            fprintf('%s\n', row);
-        end
-    else
-        fprintf('%-10s %-12s\n', 'C', 'CV Acc (%)');
-        fprintf('%s\n', repmat('-', 1, 24));
-        for ci = 1:numel(C_grid)
-            marker = '';
-            if ci == bestIdx(1)
-                marker = ' <-- BEST';
-            end
-            fprintf('%-10.3g %-12.2f%s\n', C_grid(ci), cvAcc(ci,1), marker);
-        end
-    end
-    fprintf('\n(Values in brackets = best configuration)\n\n');
-end
 
 % =========================================================================
 % Load all images from a directory tree, extract features, return table 

@@ -22,20 +22,18 @@ Nessuna ulteriore installazione via shell è richiesta (nessun framework Python 
 Ogni funzione del progetto è implementata in un file `.m` dedicato, seguendo paradigmi di Clean Code e favorendo la modularità e leggibilità. Ecco un riepilogo dettagliato del ruolo di ciascun script:
 
 ### File Principali di Esecuzione
-- **`main.m`**: È il punto di ingresso dell'applicazione (Entry point). Permette di lanciare la GUI visuale (se eseguito senza parametri) oppure di lanciare il training veloce da command line / CLI passando l'argomento `'train'`.
+- **`main.m`**: È il punto di ingresso dell'applicazione (Entry point). Permette di lanciare l'addestramento da command line con grid search automatica su tutti i kernel. Opzionalmente, accetta come parametro il path personalizzato del dataset. Se non viene fornito, usa la cartella `dataset` predefinita.
 
 ### Moduli della Pipeline di Elaborazione
 - **`preprocessing.m` (Fase 1)**: Modulo per il trattamento primario dell'immagine MRI (convertita in scala di grigi). Implementa l'applicazione sequenziale del filtro Passa-Alto (Laplaciano) per l'edge-sharpening e delineamento differenziale, filtri Passa-Basso (Gaussiano 5x5) per ammorbidire imperfezioni non del tumore e filtro Mediano per ridurre pesantemente il rumore salt-and-pepper preservando i bordi essenziali.
 - **`segmentation.m` (Fase 2)**: Isola l'area cerebrale di pertinenza. Implementa diversi algoritmi di Image Segmentation, incrociandone i risultati: Expectation-Maximization (EM basato su GMM dei tessuti) e sogliatura dinamica (Otsu Thresholding).
-- **`feature_extraction.m` (Fase 3)**: Modulo matematico che converte le aree maschera della segmentazione in matrici e dati statistici. In totale computa ed estrae **11 parametri (features)**: feature di primo ordine (Mean, Std, Entropy, Smoothness, Uniformity), feature di momento superiore (Normalizzate alla 3a e 4a dimensione) e feature testurali (Energy, Contrast, Inverse Difference Moment IDM, Correlation).
-- **`genetic_feature_selection.m` (Opzionale)**: Routine Euristica ispirata ai meccanismi biologici (Algoritmo Genetico). Ha lo scopo di minimizzare la funzione di predizione scartando feature irrilevanti provando casualmente maschere di selezione (cromosomi). Usa come fitness la funzione di loss derivata da una Cross Validation "5-fold", massimizzando logicamente l'Accuratezza SVM di validazione.
+- **`feature_extraction.m` (Fase 3)**: Modulo matematico che converte le aree maschera della segmentazione in matrici e dati statistici. In totale computa ed estrae **7 parametri (features)**: feature di primo ordine (Mean, Std, Entropy, Smoothness, Uniformity) e feature di momento superiore (Normalizzate alla 3a e 4a dimensione).
 - **`svm_classifier.m` (Fase 4)**: Funzione trainante di supporto vettoriale che materializza la predizione. Implementa il multi-classe basandosi sull'algoritmo Error-Correcting Output Codes (ECOC one-vs-all). Permette flessibilmente l'interscambio immediato fra 4 astrazioni concettuali differenti: kernel Radial Basis Function (RBF), Lineare, Polinomiale e Quadratico. Accetta opzionalmente i parametri `BoxConstraint` (C) e `KernelScale` (gamma) per l'uso diretto con i valori ottimali trovati dalla grid search.
 - **`svm_grid_search.m` (Ottimizzazione)**: Modulo dedicato alla ricerca degli iper-parametri SVM ottimali tramite **Grid Search con k-fold Cross-Validation stratificata** combinata al **riconoscimento del Kernel migliore**. Esplora la griglia combinatoria di `BoxConstraint` (C) e `KernelScale` (γ) per tutti i kernel in input (es. tutti e 4 passati come `'auto'`), su tutti i fold del training set. Al termine restituisce la combinazione **(Kernel, C, γ)** massima assoluta, evitando data leakage dal test set. Produce una tabella ASCII completa dei risultati intermedi per ogni kernel valutato.
 - **`evaluate_metrics.m`**: Motore inferenziale statistico di fine pipeline. Date in pasto target originali e classi predette restituisce la Matrice di Confusione con Accuratezza, Sensibilità, Specificità, Precisione ed F1-Score (medie multi-classe) da comparare con l'originale ricerca target.
 
-### Utilities di Supporto e Benchmark
-- **`train_model.m`**: Script che automatizza e coordina le procedure precedenti sui set integrali di un database. Cicla ricorsivamente ed estrae le features dal folder di `Training` normalizzandole statisticamente per limitare l'overfitting. Supporta il flag opzionale `'GridSearch'` per eseguire automaticamente la Grid Search prima del training finale. Salva infine i pesi del kernel e la media per la standardizzazione nel file consolidato `brain_tumor_model.mat`, e i risultati della grid search in `grid_search_results.mat`.
-- **`compare_kernels.m`**: Potente script di misurazione comparativa. Estrae a strascico l'intero dataset e lo immette nelle 4 configurazioni SVM in un unico respiro. Crea un elegante grafico a barre per mettere in luce l'impatto algoritmico del Kernel sulla metrica d'interesse. (Essendo lungo, salva a terra la cache di dati nativi estratti in `feature_cache.mat` al primo giro per potenziamento drastico della computazione alle run future).
+### Utilities di Supporto
+- **`train_model.m`**: Script che automatizza e coordina le procedure precedenti sui set integrali di un database (`Training` e `Testing`). Cicla ricorsivamente ed estrae le features normalizzandole statisticamente (z-score) per limitare l'overfitting. Esegue in automatico una Grid Search strutturata con parametri opzionali configurabili prima del training finale, valutando al termine il modello multi-classe con i pesi ideali direttamente sul set di Test calcolando diverse metriche. Salva infine i pesi del kernel e la media per la standardizzazione nel file consolidato `brain_tumor_model.mat`, e i risultati della grid search in `grid_search_results.mat`.
 
 ---
 
@@ -43,30 +41,16 @@ Ogni funzione del progetto è implementata in un file `.m` dedicato, seguendo pa
 
 Il sistema è un programma ad _apprendimento supervisionato_. Non può compiere deduzioni e classificare correttamente (Classify) su immagini libere finché non è stato "addestrato" (Training) con i dati del dataset corretto.
 
-### Fase A: Eseguire il Training (Addestramento del Modello)
-L'addestramento della SVM avviene interamente da **Command Line (CLI)** di MATLAB. Nel prompt di MATLAB esegui:
+### Fase A: Eseguire il Training (Addestramento del Modello con Grid Search)
+L'addestramento della SVM avviene interamente da **Command Line (CLI)** di MATLAB. Il sistema esegue SEMPRE una **Grid Search con Cross-Validation** per individuare automaticamente il **Kernel migliore** tra tutti e 4 quelli disponibili (RBF, Lineare, Polinomiale, Quadratico) e i valori ottimali degli iper-parametri (`BoxConstraint` C e `KernelScale` γ).
+
+Nel prompt di MATLAB esegui:
 ```matlab
-% Forma Base con default (kernel RBF)
-main('train')
+% Esecuzione sul dataset di default (cerca la cartella "dataset" nel percorso corrente)
+main()
 
-% Specificando Kernel RBF (migliore su questo set)
-main('train', 'rbf')
-```
-Questo genererà un log in tempo reale delle cartelle ispezionate (iterazioni batch per batch) che certificherà una volta giunto al termine, la completezza della procedura. Il file dei pesi vettoriali `brain_tumor_model.mat` verrà salvato nella cartella *dataset/*.
-
-### Fase A-bis: Training con Grid Search + Cross-Validation (Migliore)
-Per trovare automaticamente sia il **Kernel migliore** che i valori ottimali degli iper-parametri SVM (`BoxConstraint` C e `KernelScale` γ), esegui il training con Grid Search. Se non specifichi nulla, il programma testerà in automatico **tutti e 4 i kernel disponibili** (RBF, Lineare, Polinomiale, Quadratico):
-```matlab
-% Grid Search automatica globale (testa tutti i kernel su una griglia di default)
-main('gridsearch')
-
-% Grid Search specificando un solo kernel (per risparmiare tempo)
-main('gridsearch', 'rbf')
-
-% Personalizzando la griglia (testa tutti i kernel con le tue opzioni)
-main('gridsearch', 'auto', 'KFolds', 10, ...
-     'CValues',      [0.01 0.1 1 10 100], ...
-     'GammaValues',  [0.001 0.01 0.1 1])
+% Esecuzione specificando un percorso personalizzato per il dataset
+main('mio/percorso/al/dataset')
 ```
 
 Il sistema:
@@ -88,9 +72,7 @@ datasetPath = '/path/to/dataset';
     'GammaValues', logspace(-3, 2, 6));
 ```
 
-### Fase B: Ottenere le Statistiche del Paper Target (Testing dell'intero set)
-Per testare l'algoritmo *su tutti i record* tenuti in disparte e rilegati per Validazione (Testing Folder), usare il comando dedicato all'analisi qualitativa di massa nel Terminal di MATLAB:
-```matlab
-compare_kernels('/path/to/dataset')
-```
-Nel MATLAB Command Window appariranno le Matrici di Confusione e le seguenti metriche cruciali per validare contro i target prescritti del paper: *Accuracy* (Obiettivo: $\ge 98.30\%$), *Sensitivity / Rischio veri positivi* (Obiettivo: $\ge 98\%$), e *Specificity / Sicurezza falsi allarmi* (Obiettivo: $100\%$). Verrà anche generata una UI figure aggiuntiva (Bar Chart) che riassumerà con codice coloro-centrico le prestazioni divise per il variare dell'iper-parametro di Supporto Vettoriale (le 4 varianti di kernel).
+### Visualizzare le Metriche Finali
+La valutazione delle performance sull'intero Testing Set avviene automaticamente al termine della procedura di addestramento e validazione gestita da `train_model`, e invocabile tramite `main()`.
+
+Nel MATLAB Command Window verranno mostrate alla fine del calcolo le Matrici di Confusione e le seguenti metriche fondamentali per validare contro i target prescritti del paper: *Accuracy*, *Sensitivity / Rischio veri positivi*, *Specificity / Sicurezza falsi allarmi*, *Precision* e l'*F1-Score*. Tutte queste misurazioni derivano rigorosamente dall'esecuzione dei dati "invisibili" di Test tramite l'apparato SVM (supportato dalla validazione ECOC).
