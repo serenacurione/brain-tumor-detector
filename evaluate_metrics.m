@@ -1,11 +1,4 @@
 function metrics = evaluate_metrics(y_true, y_pred)
-% EVALUATE_METRICS Compute confusion matrix and performance metrics.
-%
-%   metrics = EVALUATE_METRICS(y_true, y_pred)
-%
-%   Inputs:
-%       y_true - Ground-truth labels (categorical or numeric vector)
-%       y_pred - Predicted labels (same type as y_true)
 %   Output:
 %       metrics - Struct with fields:
 %                 .confMat     - Confusion matrix (C x C)

@@ -1,16 +1,4 @@
 function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType, varargin)
-% SVM_CLASSIFIER  Train and evaluate a multi-class SVM with a given kernel.
-%
-%   results = SVM_CLASSIFIER(X_train, y_train, X_test, y_test, kernelType)
-%   results = SVM_CLASSIFIER(..., 'BoxConstraint', C, 'KernelScale', gamma)
-%
-%   Inputs:
-%       X_train    - N_train x F normalised feature matrix
-%       y_train    - N_train x 1 categorical (or cellstr/numeric) labels
-%       X_test     - N_test  x F normalised feature matrix
-%       y_test     - N_test  x 1 categorical (or cellstr/numeric) labels
-%       kernelType - 'rbf' (default) | 'linear' | 'polynomial' | 'quadratic'
-%
 %   Optional Name-Value Pairs:
 %       'BoxConstraint' - SVM regularisation parameter C (default: 1)
 %       'KernelScale'   - RBF/poly kernel bandwidth gamma (default: 'auto')
@@ -53,8 +41,6 @@ function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType, 
                   'Unknown kernel: ''%s''. Use rbf|linear|polynomial|quadratic.', kernelType);
     end
 
-    % fitcecoc does NOT accept categorical Y — convert to cellstr.
-    % This preserves the class names and ordering.
     if iscategorical(y_train)
         classNames   = categories(y_train);
         y_train_fit  = cellstr(y_train);
@@ -70,7 +56,6 @@ function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType, 
         y_test_fit   = y_test;
     end
 
-    % Build SVM learner via templateSVM() with hyperparameters.
     % KernelScale is only meaningful for rbf/polynomial kernels.
     useGamma = ~isnan(gamma_val) && ~strcmp(kernelFcn, 'linear');
 
@@ -119,7 +104,6 @@ function results = svm_classifier(X_train, y_train, X_test, y_test, kernelType, 
 
     y_test_cat = categorical(y_test_fit, classNames);
 
-    % Evaluate
     metrics = evaluate_metrics(y_test_cat, predictions);
 
     results.model       = model;

@@ -1,74 +1,33 @@
-function [seg_em, seg_threshold] = segmentation(img)
-% SEGMENTATION Segment a pre-processed MRI image using multiple algorithms.
-%
-%   [seg_em, seg_threshold] = SEGMENTATION(img)
-%
+function [seg_smooth_otsu, seg_multi, seg_edge] = segmentation(img)
 %   Input:
-%       img  - Pre-processed grayscale double image in [0, 1]
-%   Output:
-%       seg_em        - EM-based segmentation (binary mask of tumour region)
-%       seg_threshold - Gray-level threshold segmentation (binary mask)
+%       img - Immagine in scala di grigi double [0, 1]
+%   Outputs:
+%       seg_smooth_otsu - Maschera binaria: Otsu preceduto da smoothing
+%       seg_multi       - Matrice label: Segmentazione multi-livello (es. 3 classi)
+%       seg_edge        - Maschera binaria: Otsu calcolato solo sui contorni (Edge-masked)
 
+    %% 1. Sogliatura Globale con Pre-Smoothing (Otsu)
+    img_smooth = imgaussfilt(img, 3);
+    level_smooth = graythresh(img_smooth);
+    seg_smooth_otsu = imbinarize(img_smooth, level_smooth);
 
-    % 1. EM segmentation (Gaussian Mixture Model, K=3 tissues)
-    seg_em = emSegmentation(img, 3);
+    %% 2. Sogliatura Multi-livello (Multithresh)
+    levels = multithresh(img, 2); 
+    seg_multi = imquantize(img, levels);
 
-    % 2. Threshold segmentation (Otsu on EM foreground)
-    level = graythresh(img);
-    seg_threshold = imbinarize(img, level);
-    seg_threshold = imfill(seg_threshold, 'holes');
-    seg_threshold = bwareaopen(seg_threshold, 50);
-end
+    %% 3. Sogliatura Edge-Masked 
+    % Utile per oggetti piccoli in grandi background (simmetria dell'istogramma)
+    
+    [Gmag, ~] = imgradient(img_smooth);
+    max_grad = max(Gmag(:));
+    edge_mask = Gmag > (0.55 * max_grad);
+    
+    img_masked = img .* double(edge_mask);
+    
+    valid_pixels_idx = img_masked > 0;
+    level_edge = graythresh(img_masked(valid_pixels_idx));
+    
+    % Step E: Applicare la soglia trovata all'immagine globale
+    seg_edge = imbinarize(img, level_edge);
 
-% EM segmentation via Gaussian Mixture Model (custom, no toolbox used)
-function mask = emSegmentation(img, K)
-    pixels = double(img(:));
-    N = numel(pixels);
-
-    % Initialisation (k-means style: evenly spaced means)
-    mu  = linspace(min(pixels), max(pixels), K);
-    sig = ones(1, K) * var(pixels) / K + 1e-6;   % variance per component
-    pi_ = ones(1, K) / K;                          % mixing weights
-
-    maxIter = 100;
-    tol     = 1e-6;
-    logLikPrev = -Inf;
-
-    gamma = zeros(N, K);   % responsibilities
-
-    for iter = 1:maxIter
-        % E-step: compute responsibilities
-        for k = 1:K
-            gamma(:, k) = pi_(k) * gaussPdf(pixels, mu(k), sig(k));
-        end
-        sumGamma = sum(gamma, 2) + 1e-300;   % avoid /0
-        gamma    = gamma ./ sumGamma;
-
-        % Log-likelihood (for convergence check)
-        logLik = sum(log(sumGamma));
-        if abs(logLik - logLikPrev) < tol
-            break;
-        end
-        logLikPrev = logLik;
-
-        % M-step: update parameters
-        Nk = sum(gamma, 1) + 1e-10;          % effective count per cluster
-        for k = 1:K
-            mu(k)  = (gamma(:,k)' * pixels) / Nk(k);
-            sig(k) = (gamma(:,k)' * (pixels - mu(k)).^2) / Nk(k) + 1e-6;
-            pi_(k) = Nk(k) / N;
-        end
-    end
-
-    % pick the cluster with the highest mean (brightest → tumour candidate)
-    [~, tumorCluster] = max(mu);
-    tumourPost = gamma(:, tumorCluster);
-    mask = reshape(tumourPost > 0.5, size(img));
-
-    mask = imfill(mask, 'holes');
-    mask = bwareaopen(mask, 30);
-end
-
-function p = gaussPdf(x, mu, sigma2)
-    p = exp(-0.5 * (x - mu).^2 / sigma2) / sqrt(2 * pi * sigma2);
 end

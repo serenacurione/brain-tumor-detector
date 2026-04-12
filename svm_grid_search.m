@@ -1,11 +1,4 @@
 function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, varargin)
-% SVM_GRID_SEARCH  Exhaustive grid search + k-fold cross-validation for SVM.
-%
-%   [bestParams, gsResults] = SVM_GRID_SEARCH(X_train, y_train, kernels)
-%   [bestParams, gsResults] = SVM_GRID_SEARCH(..., 'KFolds', 5,
-%                                 'CValues', [0.1 1 10 100],
-%                                 'GammaValues', [0.001 0.01 0.1 1])
-%
 %   Inputs:
 %       X_train    - N x F normalised feature matrix (training set only)
 %       y_train    - N x 1 categorical labels
@@ -31,9 +24,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
 %                    .cvAccuracy - accuracy matrix
 %                    .bestIdx    - [row col] index into cvAccuracy for this kernel
 
-    % ------------------------------------------------------------------
-    % Parse inputs
-    % ------------------------------------------------------------------
     p = inputParser();
     p.addRequired('X_train');
     p.addRequired('y_train');
@@ -55,9 +45,7 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
         kernels = {'rbf', 'linear', 'polynomial', 'quadratic'};
     end
 
-    % ------------------------------------------------------------------
     % Convert labels to cellstr for fitcecoc
-    % ------------------------------------------------------------------
     if iscategorical(y_train)
         y_fit = cellstr(y_train);
     elseif isnumeric(y_train)
@@ -66,22 +54,15 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
         y_fit = y_train;
     end
 
-    % ------------------------------------------------------------------
     % Build k-fold partition (stratified by class)
-    % ------------------------------------------------------------------
     cvp = cvpartition(categorical(y_fit), 'KFold', kFolds, 'Stratify', true);
 
     globalMaxAcc = -1;
     bestParams   = [];
 
-    % Pre-allocate gsResults array
-    % We will fill this iteratively
     gsResults = struct('kernelType', {}, 'C_grid', {}, 'gamma_grid', {}, ...
                        'cvAccuracy', {}, 'bestIdx', {});
 
-    % ------------------------------------------------------------------
-    % Outer loop: Kernels
-    % ------------------------------------------------------------------
     for kIdx = 1:numel(kernels)
         kernelType = lower(strtrim(kernels{kIdx}));
 
@@ -111,9 +92,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
         nGamma = numel(gamma_grid);
         cvAccuracy = zeros(nC, nGamma);
 
-        % ------------------------------------------------------------------
-        % Grid search inner loops
-        % ------------------------------------------------------------------
         for ci = 1:nC
             C_val = C_grid(ci);
 
@@ -157,7 +135,6 @@ function [bestParams, gsResults] = svm_grid_search(X_train, y_train, kernels, va
                                    'Learners', t, ...
                                    'Coding',   'onevsall');
 
-                    % Evaluate
                     pred = predict(mdl, X_cv_val);
                     foldAcc(fold) = mean(strcmp(pred, y_cv_val));
                 end

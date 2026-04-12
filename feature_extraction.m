@@ -1,8 +1,4 @@
 function features = feature_extraction(seg_mask, img_gray)
-% FEATURE_EXTRACTION Compute a statistical feature vector from a segmented MRI region.
-%
-%   features = FEATURE_EXTRACTION(seg_mask, img_gray)
-%
 %   Inputs:
 %       seg_mask - Binary segmentation mask (H x W logical)
 %       img_gray - Original pre-processed grayscale double image (H x W)
@@ -20,14 +16,10 @@ function features = feature_extraction(seg_mask, img_gray)
     % 1. Basic first-order statistics
     mu = mean(pixels);
     sigma = std(pixels);
-
-    % Entropy
     ent = entropy_val(pixels);
-
     % Higher-order moments (normalised)
     n3 = mean((pixels - mu).^3) / (sigma^3 + eps);
     n4 = mean((pixels - mu).^4) / (sigma^4 + eps);
-
 
     % 2. Smoothness and Uniformity from histogram
     [hcounts, ~] = histcounts(pixels, 64, 'Normalization', 'probability');
@@ -35,11 +27,10 @@ function features = feature_extraction(seg_mask, img_gray)
     uniformity = sum(hcounts.^2);
     smoothness = 1 - 1 / (1 + sigma^2);
 
-    % Assemble output vector
     features = [mu, sigma, ent, n3, n4, smoothness, uniformity];
 end
 
-% Local helper: Shannon entropy from pixel array
+% Shannon entropy from pixel array
 function H = entropy_val(pixels)
     [counts, ~] = histcounts(pixels, 256, 'Normalization', 'probability');
     counts(counts == 0) = [];
