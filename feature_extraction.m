@@ -8,12 +8,12 @@ function features = feature_extraction(seg_mask, img_gray)
 %                   smoothness, uniformity]
 
     % Extract pixel values inside the mask
-    pixels = img_gray(seg_mask);
+    pixels = double(img_gray(seg_mask));
     if isempty(pixels)
-        pixels = img_gray(:);
+        pixels = double(img_gray(:));
     end
 
-    % 1. Basic first-order statistics
+    % Basic first-order statistics
     mu = mean(pixels);
     sigma = std(pixels);
     ent = entropy_val(pixels);
@@ -21,7 +21,7 @@ function features = feature_extraction(seg_mask, img_gray)
     n3 = mean((pixels - mu).^3) / (sigma^3 + eps);
     n4 = mean((pixels - mu).^4) / (sigma^4 + eps);
 
-    % 2. Smoothness and Uniformity from histogram
+    % Smoothness and Uniformity from histogram
     [hcounts, ~] = histcounts(pixels, 64, 'Normalization', 'probability');
     hcounts(hcounts == 0) = [];
     uniformity = sum(hcounts.^2);

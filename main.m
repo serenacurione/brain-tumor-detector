@@ -1,9 +1,6 @@
-function main(datasetPath)
-    addpath(fileparts(mfilename('fullpath')));
+clc; clear; close all;
 
-    if nargin < 1 || isempty(datasetPath)
-        datasetPath = fullfile(fileparts(mfilename('fullpath')), 'dataset');
-    end
+addpath(fileparts(mfilename('fullpath')));
+datasetPath = fullfile(fileparts(mfilename('fullpath')), 'dataset');
 
-    train_model(datasetPath);
-end
+train_model(datasetPath);

@@ -66,10 +66,7 @@ datasetPath = '/path/to/dataset';
 [X_train, y_train, ~] = ...; % dopo aver estratto le features
 
 % Testa ad esempio RBF e Linear passandoli come cell array
-[bestParams, gsResults] = svm_grid_search(X_train, y_train, {'rbf', 'linear'}, ...
-    'KFolds', 5, ...
-    'CValues',     logspace(-2, 3, 6), ...
-    'GammaValues', logspace(-3, 2, 6));
+bestParams = svm_grid_search(X_train, y_train, {'rbf', 'linear'});
 ```
 
 ### Visualizzare le Metriche Finali

@@ -1,2 +1,3 @@
-dataset/*
-dataset_full/*
+dataset*
+output*
+save_segmentation_results.m
